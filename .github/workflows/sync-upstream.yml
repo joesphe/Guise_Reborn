@@ -50,9 +50,9 @@ jobs:
           echo "SDK root: $SDK"
           ls "$SDK/cmdline-tools" || true
           yes | "$SDKM" --licenses >/dev/null 2>&1 || true
-          # 先稳定渠道；android-37 若只在预览渠道，再退回 --channel=3
-          "$SDKM" --install "platform-tools" "platforms;android-37" "build-tools;37.0.0" \
-            || "$SDKM" --channel=3 --install "platforms;android-37" "build-tools;37.0.0"
+          # 注意：新版 Android 平台带小版本号，包名是 platforms;android-37.0（不是 android-37）
+          yes | "$SDKM" --install "platform-tools" "platforms;android-37.0" "build-tools;37.0.0" \
+            || yes | "$SDKM" --channel=3 --install "platforms;android-37.0" "build-tools;37.0.0"
           echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_HOME=$SDK"     >> "$GITHUB_ENV"
           echo "sdk.dir=$SDK"          > local.properties

@@ -288,8 +288,11 @@ class AppUpdater {
     }.getOrDefault(emptyList())
 
     companion object {
-        const val RELEASES_URL = "https://github.com/daxiaamu/Guise_Reborn/releases"
-        private const val MANIFEST_REPOSITORY_PATH = "daxiaamu/Guise_Reborn@main"
+        const val RELEASES_URL = "https://github.com/joesphe/Guise_Reborn/releases"
+        // 更新源指向自己的 fork；清单 latest-release.json 发布在 local 分支
+        private const val MANIFEST_REPOSITORY = "joesphe/Guise_Reborn"
+        private const val MANIFEST_BRANCH = "local"
+        private const val MANIFEST_REPOSITORY_PATH = "$MANIFEST_REPOSITORY@$MANIFEST_BRANCH"
         private const val CONNECT_TIMEOUT_MS = 6_000
         private const val READ_TIMEOUT_MS = 8_000
         const val UPDATE_PREFERENCES = "app_update"
@@ -305,11 +308,11 @@ class AppUpdater {
         private val DOWNLOAD_PLAN_LOCK = Any()
         private val SHA256_PATTERN = Regex("[0-9a-f]{64}")
         private fun updateSources(manifestName: String) = listOf(
-            "https://api.github.com/repos/daxiaamu/Guise_Reborn/contents/$manifestName?ref=main",
+            "https://api.github.com/repos/$MANIFEST_REPOSITORY/contents/$manifestName?ref=$MANIFEST_BRANCH",
             "https://cdn.jsdelivr.net/gh/$MANIFEST_REPOSITORY_PATH/$manifestName",
             "https://fastly.jsdelivr.net/gh/$MANIFEST_REPOSITORY_PATH/$manifestName",
             "https://gcore.jsdelivr.net/gh/$MANIFEST_REPOSITORY_PATH/$manifestName",
-            "https://raw.githubusercontent.com/daxiaamu/Guise_Reborn/main/$manifestName",
+            "https://raw.githubusercontent.com/$MANIFEST_REPOSITORY/$MANIFEST_BRANCH/$manifestName",
         )
     }
 }

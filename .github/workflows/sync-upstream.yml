@@ -1,0 +1,144 @@
+name: Sync upstream and release
+
+# 作用：定时检查上游 daxiaamu/Guise_Reborn 是否有新的稳定版 tag，
+# 有则把本地二改提交 rebase 到新 tag 上，编译出 APK 并发布 Release，
+# 同时更新 latest-release.json 供 App 内更新器读取。
+#
+# 需要：仓库 Settings → Actions → General → Workflow permissions 设为
+#       "Read and write permissions"，允许本工作流提交与发布。
+
+on:
+  schedule:
+    # 每天 03:00 UTC（北京时间 11:00）
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: '即使没有上游新版本也强制重新编译发布'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout local branch
+        uses: actions/checkout@v4
+        with:
+          ref: local
+          fetch-depth: 0
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Ensure required SDK platforms
+        run: |
+          # 项目 targetSdk/buildTools 较新，优先用稳定渠道，失败再退回预览渠道
+          sdkmanager --install "platforms;android-37" "build-tools;37.0.0" >/dev/null 2>&1 \
+            || sdkmanager --channel=3 --install "platforms;android-37" "build-tools;37.0.0"
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+
+      - name: Git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream tags
+        run: |
+          git remote add upstream https://github.com/daxiaamu/Guise_Reborn.git 2>/dev/null || true
+          git fetch upstream --tags --prune
+
+      - name: Rebase onto newest upstream tag
+        id: rebase
+        run: |
+          set -e
+          # 找到本地二改的第一个提交，其父提交即二改基线
+          BASE_SHA=$(git log --format='%H|%s' -n 300 | grep 'local:' | tail -1 | cut -d'|' -f1)
+          BASE_COMMIT=$(git rev-parse "${BASE_SHA}^")
+          BASE_TAG=$(git tag --points-at "$BASE_COMMIT" | head -1)
+          echo "二改基线: $BASE_COMMIT (tag: $BASE_TAG)"
+
+          NEWEST=""
+          for t in $(git tag --list 'v*' --sort=v:refname | grep -v beta); do
+            [ "$t" = "$BASE_TAG" ] && continue
+            if git merge-base --is-ancestor "$BASE_COMMIT" "$t"; then NEWEST="$t"; fi
+          done
+
+          if [ -z "$NEWEST" ] && [ "${{ inputs.force }}" != "true" ]; then
+            echo "上游没有新版本，跳过"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          [ -z "$NEWEST" ] && NEWEST="$BASE_TAG"
+
+          echo "目标版本: $NEWEST"
+          git rebase "$NEWEST"
+
+          UPCODE=$(git show "${NEWEST}:app/version.properties" | sed -n 's/^versionCode=//p' | tr -d '\r')
+          NEWCODE=$((900000 + UPCODE))
+          VERNAME=$(echo "$NEWEST" | sed 's/^v//')
+          printf '# synced\nversionCode=%s\nversionName=%s-local\n\nprerelease=false\n' \
+            "$NEWCODE" "$VERNAME" > app/version.properties
+          git add app/version.properties
+          git commit -m "local: 同步到 $NEWEST，版本号 $NEWCODE" || true
+
+          echo "changed=true"    >> "$GITHUB_OUTPUT"
+          echo "tag=$NEWEST"     >> "$GITHUB_OUTPUT"
+          echo "ver=$VERNAME"    >> "$GITHUB_OUTPUT"
+          echo "code=$NEWCODE"   >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        if: steps.rebase.outputs.changed == 'true'
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Push rebased branch
+        if: steps.rebase.outputs.changed == 'true'
+        run: git push origin local
+
+      - name: Publish release and manifest
+        if: steps.rebase.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          VER="${{ steps.rebase.outputs.ver }}"
+          CODE="${{ steps.rebase.outputs.code }}"
+          TAG="local-$VER"
+          ASSET="Guise-$VER-local.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$ASSET"
+
+          # 已存在同名 release 则先删除（force 重建场景）
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" "$ASSET" \
+            --title "Guise $VER (local build)" \
+            --notes "自动同步上游 ${{ steps.rebase.outputs.tag }}，保留本地二改（坐标系统转换、模板-应用启用状态等）。"
+
+          DL="https://github.com/${{ github.repository }}/releases/download/$TAG/$ASSET"
+          cat > latest-release.json <<EOF
+          {
+            "versionCode": $CODE,
+            "versionName": "$VER-local",
+            "prerelease": false,
+            "title": "Guise $VER (local)",
+            "notes": "自动同步上游 ${{ steps.rebase.outputs.tag }}，保留本地二改。",
+            "releaseUrl": "https://github.com/${{ github.repository }}/releases/tag/$TAG",
+            "apkUrls": ["$DL"]
+          }
+          EOF
+
+          git add latest-release.json
+          git commit -m "chore: latest-release.json -> $VER" || true
+          git push origin local

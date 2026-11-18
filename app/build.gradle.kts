@@ -13,7 +13,8 @@ android {
     buildToolsVersion = "37.0.0"
 
     defaultConfig {
-        applicationId = namespace
+        // Custom build: install alongside the official Guise instead of replacing it.
+        applicationId = "com.houvven.guise.coordfix"
         minSdk = 29
         targetSdk = 37
         val versionConfig = getVersionConfig()

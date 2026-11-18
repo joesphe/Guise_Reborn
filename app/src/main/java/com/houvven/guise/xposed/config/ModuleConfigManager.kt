@@ -265,7 +265,12 @@ private constructor(
 
         private const val PROCESS_EXIT_WAIT_MS = 800L
         private const val ROOT_COMMAND_TIMEOUT_SECONDS = 15L
+        private const val SCOPE_REQUEST_COOLDOWN_MS = 1200L
         private val PACKAGE_NAME_PATTERN = Regex("[A-Za-z0-9._]+")
+
+        // 作用域请求冷却时间戳，防止 apply 与 onServiceBind 同时发起 requestScope
+        @Volatile
+        private var lastScopeRequestAt = 0L
 
         fun of(config: ModuleConfig, state: ModuleConfigState) = ModuleConfigManager(config, state)
 
@@ -292,15 +297,38 @@ private constructor(
                 runCatching { service.removeScope(removedPackages.sorted()) }
             }
             if (addedPackages.isNotEmpty()) {
-                service.requestScope(
-                    addedPackages.sorted(),
-                    object : XposedService.OnScopeEventListener {
-                        override fun onScopeRequestApproved(approved: List<String>) = Unit
-                        override fun onScopeRequestFailed(message: String) = Unit
-                    },
-                )
+                val now = android.os.SystemClock.elapsedRealtime()
+                // 冷却窗口内不重复发起作用域请求，避免和 onServiceBind 的 reconcile 竞争
+                // 引发 LSPosed 的 “superseded by a newer scope request”。
+                if (now - lastScopeRequestAt >= SCOPE_REQUEST_COOLDOWN_MS) {
+                    lastScopeRequestAt = now
+                    service.requestScope(
+                        addedPackages.sorted(),
+                        object : XposedService.OnScopeEventListener {
+                            override fun onScopeRequestApproved(approved: List<String>) = Unit
+                            override fun onScopeRequestFailed(message: String) = Unit
+                        },
+                    )
+                }
             }
         }
+
+        /** 用 root 强杀目标应用，使其下次启动时读到最新配置。 */
+        suspend fun forceStopPackages(packages: Collection<String>): Result<Unit> =
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val valid = packages.filter { PACKAGE_NAME_PATTERN.matches(it) }
+                    if (valid.isEmpty()) return@runCatching
+                    val cmd = valid.joinToString("; ") { "am force-stop --user current $it" }
+                    val process = ProcessBuilder("su", "-c", cmd)
+                        .redirectErrorStream(true)
+                        .start()
+                    if (!process.waitFor(ROOT_COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                        process.destroy()
+                        error("force-stop timeout")
+                    }
+                }
+            }
 
         fun applyTemplateSelection(
             templateConfig: ModuleConfig,
@@ -308,10 +336,10 @@ private constructor(
             initiallySelected: Set<String>,
             selectedNow: Set<String>,
             notifyOnScopeError: Boolean = false,
-        ) {
+        ): Set<String> {
             val enabledPackages = selectedNow - initiallySelected
             val disabledPackages = initiallySelected - selectedNow
-            if (enabledPackages.isEmpty() && disabledPackages.isEmpty()) return
+            if (enabledPackages.isEmpty() && disabledPackages.isEmpty()) return emptySet()
 
             val prefs = PackageConfig.safePrefs
             val editor = prefs.edit()
@@ -329,9 +357,6 @@ private constructor(
                 editor.putString(packageName, config.toJson())
                 TemplateApplication.clear(packageName)
             }
-            val scopeEnablePackages = enabledPackages.filterTo(mutableSetOf()) { packageName ->
-                !getSavedConfig(packageName).enabled
-            }
             val appliedSignature = templateConfig.parameterSignature()
             enabledPackages.forEach { packageName ->
                 // 模板没显式声明的字段沿用该应用原有配置，避免冲掉本地额外设置（如 networkType）
@@ -347,10 +372,12 @@ private constructor(
                         ContextAmbient.current.getString(R.string.save_failed, "")
                     )
                 }
-                return
+                return emptySet()
             }
 
             LauncherState.setAppsEnabled(enabledPackages, disabledPackages)
+            // 写回远程配置并“读回校验 + 重试”，确保落地后再返回，
+            // 避免目标进程重启时读到上一次的旧配置（切换模板需重启两次的问题）。
             PackageConfig.notifyConfigurationsChanged()
 
             val service = ContextAmbient.xposedService ?: run {
@@ -359,35 +386,15 @@ private constructor(
                         ContextAmbient.current.getString(R.string.xposed_service_not_connected)
                     )
                 }
-                return
+                return enabledPackages
             }
-            if (disabledPackages.isNotEmpty()) {
-                runCatching { service.removeScope(disabledPackages.toList()) }
-                    .onFailure {
-                        if (notifyOnScopeError) {
-                            GlobalSnackbarHost.showOnErrorByDismissPrevious(
-                                ContextAmbient.current.getString(
-                                    R.string.xposed_scope_sync_failed,
-                                    it.message ?: it.toString(),
-                                )
-                            )
-                        }
-                    }
-            }
-            if (scopeEnablePackages.isNotEmpty()) {
-                service.requestScope(
-                    scopeEnablePackages.toList(),
-                    object : XposedService.OnScopeEventListener {
-                        override fun onScopeRequestApproved(approved: List<String>) = Unit
-
-                        override fun onScopeRequestFailed(message: String) {
-                            if (notifyOnScopeError) {
-                                reportBatchScopeError(message)
-                            }
-                        }
-                    },
-                )
-            }
+            // 统一交给 reconcileScope：按“已启用且有配置”的实际作用域一次性增删，
+            // 避免 apply 与 onServiceBind 各自 requestScope，触发 “superseded” 冲突。
+            runCatching { reconcileScope(service) }
+                .onFailure {
+                    if (notifyOnScopeError) reportBatchScopeError(it.message ?: it.toString())
+                }
+            return enabledPackages
         }
 
         private fun reportBatchScopeError(message: String) {

@@ -185,13 +185,20 @@ fun EnableTemplateScreen(template: Template) {
         if (changesApplied || !selectionLoaded) return
         changesApplied = true
 
-        ModuleConfigManager.applyTemplateSelection(
+        val appliedPackages = ModuleConfigManager.applyTemplateSelection(
             templateConfig = templateConfig,
             templateId = template.id,
             initiallySelected = initiallySelected,
             selectedNow = selects.keys.toSet(),
             notifyOnScopeError = false,
         )
+        // 配置已写入并校验落地后，用 root 强杀刚应用的目标应用：
+        // 用户重新打开即为读取新配置的干净进程，无需手动强杀，也不会“要重启两次”。
+        if (appliedPackages.isNotEmpty()) {
+            coroutineScope.launch {
+                ModuleConfigManager.forceStopPackages(appliedPackages)
+            }
+        }
     }
 
     val filteredApps by remember {

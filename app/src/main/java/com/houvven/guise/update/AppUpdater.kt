@@ -327,11 +327,14 @@ class AppUpdater {
             "https://ghproxy.net/",
         )
         private fun updateSources(manifestName: String) = listOf(
-            "https://api.github.com/repos/$MANIFEST_REPOSITORY/contents/$manifestName?ref=$MANIFEST_BRANCH",
-            "https://cdn.jsdelivr.net/gh/$MANIFEST_REPOSITORY_PATH/$manifestName",
+            // 镜像优先：GitHub 官方源在国内可能很慢或以 6/8 秒超时收尾。
+            // 首个源成功即采用；失败再并发取其余源里 versionCode 最高者兜底。
             "https://fastly.jsdelivr.net/gh/$MANIFEST_REPOSITORY_PATH/$manifestName",
             "https://gcore.jsdelivr.net/gh/$MANIFEST_REPOSITORY_PATH/$manifestName",
+            "https://cdn.jsdelivr.net/gh/$MANIFEST_REPOSITORY_PATH/$manifestName",
+            "https://ghfast.top/https://raw.githubusercontent.com/$MANIFEST_REPOSITORY/$MANIFEST_BRANCH/$manifestName",
             "https://raw.githubusercontent.com/$MANIFEST_REPOSITORY/$MANIFEST_BRANCH/$manifestName",
+            "https://api.github.com/repos/$MANIFEST_REPOSITORY/contents/$manifestName?ref=$MANIFEST_BRANCH",
         )
     }
 }

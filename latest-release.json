@@ -5,5 +5,11 @@
   "title": "Guise 2.1.4 (local)",
   "notes": "自动同步上游 v2.1.4，保留本地二改。",
   "releaseUrl": "https://github.com/joesphe/Guise_Reborn/releases/tag/local-2.1.4",
-  "apkUrls": ["https://github.com/joesphe/Guise_Reborn/releases/download/local-2.1.4/Guise-2.1.4-local.apk"]
+  "apkSha256": "60d0cdd4aeb69038d6f95b61a745fd857c7f048adff77fe69fb5fec7f233e8b3",
+  "apkUrls": [
+    "https://ghfast.top/https://github.com/joesphe/Guise_Reborn/releases/download/local-2.1.4/Guise-2.1.4-local.apk",
+    "https://gh-proxy.com/https://github.com/joesphe/Guise_Reborn/releases/download/local-2.1.4/Guise-2.1.4-local.apk",
+    "https://ghproxy.net/https://github.com/joesphe/Guise_Reborn/releases/download/local-2.1.4/Guise-2.1.4-local.apk",
+    "https://github.com/joesphe/Guise_Reborn/releases/download/local-2.1.4/Guise-2.1.4-local.apk"
+  ]
 }

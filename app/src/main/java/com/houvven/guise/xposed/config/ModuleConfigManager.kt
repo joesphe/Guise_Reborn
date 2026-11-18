@@ -94,6 +94,10 @@ private constructor(
     }
 
     private fun reportScopeError(message: String) {
+        // LSPosed 在短时间内收到多个作用域请求时，旧请求会被新请求顶掉并回报
+        // “superseded by a newer scope request”。这是良性的（最终作用域由
+        // reconcileScope 统一收敛），不向用户弹提示。
+        if (message.contains("superseded", ignoreCase = true)) return
         GlobalSnackbarHost.showOnErrorByDismissPrevious(
             context.getString(R.string.xposed_scope_sync_failed, message)
         )
@@ -398,6 +402,8 @@ private constructor(
         }
 
         private fun reportBatchScopeError(message: String) {
+            // 同 reportScopeError：superseded 属良性，不提示
+            if (message.contains("superseded", ignoreCase = true)) return
             GlobalSnackbarHost.showOnErrorByDismissPrevious(
                 ContextAmbient.current.getString(R.string.xposed_scope_sync_failed, message)
             )

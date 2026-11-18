@@ -140,6 +140,7 @@ jobs:
             --notes "自动同步上游 ${{ steps.rebase.outputs.tag }}，保留本地二改（坐标系统转换、模板-应用启用状态等）。"
 
           DL="https://github.com/${{ github.repository }}/releases/download/$TAG/$ASSET"
+          SHA="$(sha256sum "$ASSET" | awk '{print $1}')"
           cat > latest-release.json <<EOF
           {
             "versionCode": $CODE,
@@ -148,7 +149,13 @@ jobs:
             "title": "Guise $VER (local)",
             "notes": "自动同步上游 ${{ steps.rebase.outputs.tag }}，保留本地二改。",
             "releaseUrl": "https://github.com/${{ github.repository }}/releases/tag/$TAG",
-            "apkUrls": ["$DL"]
+            "apkSha256": "$SHA",
+            "apkUrls": [
+              "https://ghfast.top/$DL",
+              "https://gh-proxy.com/$DL",
+              "https://ghproxy.net/$DL",
+              "$DL"
+            ]
           }
           EOF
 

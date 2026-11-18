@@ -249,14 +249,27 @@ class AppUpdater {
         val releaseUrl = json.optString("releaseUrl")
             .ifBlank { RELEASES_URL }
         check(releaseUrl.startsWith("https://")) { "Invalid releaseUrl" }
-        val apkUrls = buildList {
+        val rawApkUrls = buildList {
             json.optJSONArray("apkUrls")?.let { urls ->
                 repeat(urls.length()) { index ->
                     urls.optString(index).takeIf(String::isNotBlank)?.let(::add)
                 }
             }
             json.optString("apkUrl").takeIf(String::isNotBlank)?.let(::add)
-        }.distinct()
+        }
+        // 对 GitHub release 下载地址自动补充国内镜像前缀（镜像优先以加速；
+        // 内容安全性由清单里的 apkSha256 校验保证）。
+        val apkUrls = buildList {
+            rawApkUrls.forEach { url ->
+                if (url.startsWith("https://github.com/") && url.contains("/releases/download/")) {
+                    GITHUB_MIRROR_PREFIXES.forEach { prefix ->
+                        val mirrored = prefix + url
+                        if (mirrored !in this) add(mirrored)
+                    }
+                }
+                if (url !in this) add(url)
+            }
+        }
         check(apkUrls.all { it.startsWith("https://") }) { "Invalid APK URL" }
         val apkSha256 = json.optString("apkSha256").lowercase()
         check(apkSha256.isBlank() || SHA256_PATTERN.matches(apkSha256)) {
@@ -307,6 +320,12 @@ class AppUpdater {
         const val APK_MIME = "application/vnd.android.package-archive"
         private val DOWNLOAD_PLAN_LOCK = Any()
         private val SHA256_PATTERN = Regex("[0-9a-f]{64}")
+        // GitHub release 下载的国内镜像前缀（依次尝试）
+        private val GITHUB_MIRROR_PREFIXES = listOf(
+            "https://ghfast.top/",
+            "https://gh-proxy.com/",
+            "https://ghproxy.net/",
+        )
         private fun updateSources(manifestName: String) = listOf(
             "https://api.github.com/repos/$MANIFEST_REPOSITORY/contents/$manifestName?ref=$MANIFEST_BRANCH",
             "https://cdn.jsdelivr.net/gh/$MANIFEST_REPOSITORY_PATH/$manifestName",

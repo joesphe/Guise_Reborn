@@ -64,6 +64,7 @@ import com.houvven.guise.ui.components.simplify.SimplifyIcon
 import com.houvven.guise.ui.routing.LauncherState
 import com.houvven.guise.ui.routing.LocalNavController
 import com.houvven.guise.xposed.config.ModuleConfig
+import com.houvven.guise.xposed.config.TemplateApplication
 import com.houvven.guise.xposed.config.ModuleConfigManager
 import java.text.Collator
 import java.util.Locale
@@ -144,7 +145,16 @@ fun EnableTemplateScreen(template: Template) {
             val configs = ModuleConfig.getAllSaved()
             val configuredPackages = configs
                 .asSequence()
-                .filter { it.enabled && it.parameterSignature() == templateSignature }
+                .filter { config ->
+                    // 优先按「模板ID + 应用时签名快照」判定：应用配置里多出的字段
+                    //（如特意设置的 networkType）不再影响判定结果。
+                    // 回退到上游原始的签名比对，兼容本次改动之前已应用的配置。
+                    config.enabled && (
+                        TemplateApplication.isApplied(
+                            config.packageName, template.id, templateSignature
+                        ) || config.parameterSignature() == templateSignature
+                    )
+                }
                 .mapTo(mutableSetOf()) { it.packageName }
             val selectedPackages = sortedApps
                 .asSequence()
@@ -175,12 +185,20 @@ fun EnableTemplateScreen(template: Template) {
         if (changesApplied || !selectionLoaded) return
         changesApplied = true
 
-        ModuleConfigManager.applyTemplateSelection(
+        val appliedPackages = ModuleConfigManager.applyTemplateSelection(
             templateConfig = templateConfig,
+            templateId = template.id,
             initiallySelected = initiallySelected,
             selectedNow = selects.keys.toSet(),
             notifyOnScopeError = false,
         )
+        // 配置已写入并校验落地后，用 root 强杀刚应用的目标应用：
+        // 用户重新打开即为读取新配置的干净进程，无需手动强杀，也不会“要重启两次”。
+        if (appliedPackages.isNotEmpty()) {
+            coroutineScope.launch {
+                ModuleConfigManager.forceStopPackages(appliedPackages)
+            }
+        }
     }
 
     val filteredApps by remember {

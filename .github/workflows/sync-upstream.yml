@@ -99,8 +99,12 @@ jobs:
           VERNAME=$(echo "$NEWEST" | sed 's/^v//')
           printf '# synced\nversionCode=%s\nversionName=%s-local\n\nprerelease=false\n' \
             "$NEWCODE" "$VERNAME" > app/version.properties
-          git add app/version.properties
-          git commit -m "local: 同步到 $NEWEST，版本号 $NEWCODE" || true
+          if ! git diff --quiet -- app/version.properties; then
+            git add app/version.properties
+            git commit -m "local: 同步到 $NEWEST，版本号 $NEWCODE"
+          else
+            echo "version.properties 无变化，跳过提交"
+          fi
 
           echo "changed=true"    >> "$GITHUB_OUTPUT"
           echo "tag=$NEWEST"     >> "$GITHUB_OUTPUT"

@@ -40,6 +40,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
 
       - name: Accept licenses and install SDK packages
         # 不用 android-actions/setup-android：它自带的 license 步骤在较新 SDK 仓库上
@@ -118,6 +119,8 @@ jobs:
         if: steps.rebase.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 显式指定目标仓库，否则 gh 可能因为存在 upstream 远端而认成上游仓库
+          GH_REPO: ${{ github.repository }}
         run: |
           set -e
           VER="${{ steps.rebase.outputs.ver }}"
@@ -127,8 +130,8 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk "$ASSET"
 
           # 已存在同名 release 则先删除（force 重建场景）
-          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$TAG" "$ASSET" \
+          gh release delete "$TAG" --repo "$GH_REPO" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" "$ASSET" --repo "$GH_REPO" \
             --title "Guise $VER (local build)" \
             --notes "自动同步上游 ${{ steps.rebase.outputs.tag }}，保留本地二改（坐标系统转换、模板-应用启用状态等）。"
 

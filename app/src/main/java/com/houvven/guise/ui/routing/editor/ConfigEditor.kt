@@ -49,6 +49,7 @@ import com.houvven.guise.module.preset.PresetRepository
 import com.houvven.guise.module.preset.TimeZonePresetRepository
 import com.houvven.guise.ui.components.SearchBox
 import com.houvven.guise.util.android.Randoms
+import com.houvven.guise.xposed.config.HooksValue
 import com.houvven.guise.xposed.config.ModuleConfig
 import com.houvven.guise.xposed.config.ModuleConfigState
 import kotlin.math.roundToInt
@@ -108,6 +109,22 @@ private fun ConfigEditorItems(state: ModuleConfigState, launch: () -> Unit) {
     val carrierPresets = remember(context) { CarrierPresetRepository.get(context) }
     val presetCatalog = remember(context) { PresetRepository.get(context) }
     val timeZonePresets = remember { TimeZonePresetRepository.presets }
+    val coordinateSystemPresets = remember {
+        listOf(
+            object : PresetAdapter {
+                override val label: String = "WGS-84（GPS 标准：Google/OSM/VirtualRegion）"
+                override val value: String = HooksValue.COORD_WGS84
+            },
+            object : PresetAdapter {
+                override val label: String = "GCJ-02（火星坐标：微信/腾讯/高德）"
+                override val value: String = HooksValue.COORD_GCJ02
+            },
+            object : PresetAdapter {
+                override val label: String = "BD-09（百度地图）"
+                override val value: String = HooksValue.COORD_BD09
+            },
+        )
+    }
     val equivalentSmallestWidthDp = state.densityDpi.value.toIntOrNull()
         ?.takeIf { it in 72..1000 && localConfiguration.smallestScreenWidthDp > 0 }
         ?.let { targetDensityDpi ->
@@ -259,6 +276,18 @@ private fun ConfigEditorItems(state: ModuleConfigState, launch: () -> Unit) {
         state.latitude,
         stringResource(R.string.location_lat),
         supportingText = stringResource(R.string.location_coordinates_summary),
+    )
+    PresetInputBox(
+        state = state.inputCoordSystem,
+        label = "输入坐标系（你填的经纬度属于哪个）",
+        preset = coordinateSystemPresets,
+        supportingText = "上面填的经纬度按此坐标系解释。",
+    )
+    PresetInputBox(
+        state = state.outputCoordSystem,
+        label = "输出坐标系（目标 App 期望的坐标）",
+        preset = coordinateSystemPresets,
+        supportingText = "微信/腾讯/高德=GCJ-02；Google/OSM/VirtualRegion=WGS-84；百度=BD-09。选错会偏移几百米。",
     )
     ContainerSwitch(
         state.randomOffset,

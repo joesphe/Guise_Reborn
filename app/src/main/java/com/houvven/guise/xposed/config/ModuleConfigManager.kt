@@ -238,6 +238,8 @@ private constructor(
         timeZone = state.timeZone.value
         longitude = state.longitude.value.toDoubleOrNull() ?: -1.0
         latitude = state.latitude.value.toDoubleOrNull() ?: -1.0
+        inputCoordSystem = state.inputCoordSystem.value.ifBlank { HooksValue.COORD_WGS84 }
+        outputCoordSystem = state.outputCoordSystem.value.ifBlank { HooksValue.COORD_WGS84 }
         randomOffset = state.randomOffset.value
         randomOffsetMeters = state.randomOffsetMeters.value.toDoubleOrNull()
             ?.takeIf { it.isFinite() && it in 0.0..ModuleConfig.MAX_RANDOM_OFFSET_METERS }

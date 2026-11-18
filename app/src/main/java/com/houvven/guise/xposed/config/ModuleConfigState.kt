@@ -35,6 +35,8 @@ class ModuleConfigState private constructor(moduleConfig: ModuleConfig) {
 
     val longitude = mutableStateOf(moduleConfig.longitude.display(-1.0))
     val latitude = mutableStateOf(moduleConfig.latitude.display(-1.0))
+    val inputCoordSystem = mutableStateOf(moduleConfig.inputCoordSystem)
+    val outputCoordSystem = mutableStateOf(moduleConfig.outputCoordSystem)
     val randomOffset = mutableStateOf(moduleConfig.randomOffset)
     val randomOffsetMeters = mutableStateOf(
         moduleConfig.randomOffsetMeters.display(ModuleConfig.DEFAULT_RANDOM_OFFSET_METERS)
@@ -70,7 +72,8 @@ class ModuleConfigState private constructor(moduleConfig: ModuleConfig) {
             fingerPrint,
             networkType, wifiSSID, wifiBSSID, wifiMacAddress, simOperator, simOperatorName,
             simCountry, imei, phoneNum, androidId, lac, cid, longitude, latitude,
-            randomOffsetMeters, versionCode, versionName, batteryLevel, language, timeZone,
+            randomOffsetMeters, inputCoordSystem, outputCoordSystem,
+            versionCode, versionName, batteryLevel, language, timeZone,
         )
 
     private val booleanStates: List<MutableState<Boolean>>

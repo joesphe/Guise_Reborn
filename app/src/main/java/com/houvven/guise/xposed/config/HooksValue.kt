@@ -16,4 +16,9 @@ object HooksValue {
     const val SCREENSHOTS_UNHOOK = -1
     const val SCREENSHOTS_DISABLE = 0
     const val SCREENSHOTS_ENABLE = 1
+
+    // Coordinate systems for the location latitude/longitude conversion.
+    const val COORD_WGS84 = "WGS84"   // GPS standard: Google/OSM/VirtualRegion
+    const val COORD_GCJ02 = "GCJ02"   // Mars: WeChat/腾讯/高德/腾讯地图
+    const val COORD_BD09 = "BD09"     // Baidu
 }

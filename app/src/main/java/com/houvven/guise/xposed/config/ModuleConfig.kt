@@ -37,6 +37,10 @@ data class ModuleConfig(
     var timeZone: String = "",
     var longitude: Double = -1.0,
     var latitude: Double = -1.0,
+    // Coordinate systems of the values above (input) and of the value handed to the
+    // target app (output). See [CoordTransform]. Defaults keep WGS-84 -> WGS-84 = raw.
+    var inputCoordSystem: String = HooksValue.COORD_WGS84,
+    var outputCoordSystem: String = HooksValue.COORD_WGS84,
     var randomOffset: Boolean = false,
     var randomOffsetMeters: Double = DEFAULT_RANDOM_OFFSET_METERS,
     var makeWifiLocationFail: Boolean = false,
@@ -53,6 +57,17 @@ data class ModuleConfig(
     var passApplications: Boolean = false,
 ) {
     val isEnable: Boolean get() = enabled
+
+    /**
+     * Latitude/longitude converted from [inputCoordSystem] to [outputCoordSystem],
+     * ready to be handed to the target app. When either coordinate is unset (-1.0) the
+     * value is returned unchanged.
+     */
+    fun outputCoordinates(): Pair<Double, Double> {
+        if (latitude == -1.0 || longitude == -1.0) return latitude to longitude
+        if (inputCoordSystem == outputCoordSystem) return latitude to longitude
+        return CoordTransform.convert(latitude, longitude, inputCoordSystem, outputCoordSystem)
+    }
 
     fun toJson() = json.encodeToString(serializer(), this)
 

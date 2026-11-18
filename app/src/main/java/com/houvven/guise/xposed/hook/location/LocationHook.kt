@@ -54,8 +54,11 @@ import java.util.function.Consumer
 class LocationHook : LoadPackageHandler, LocationHookBase() {
 
 
-    private var latitude = config.latitude
-    private var longitude = config.longitude
+    // Values handed to the target app, already converted from the user's input
+    // coordinate system to the app's expected (output) coordinate system.
+    private val outputCoordinate = config.outputCoordinates()
+    private var latitude = outputCoordinate.first
+    private var longitude = outputCoordinate.second
 
     // Pretend a healthy GPS constellation is being tracked. Apps that gate on "are there
     // any satellites?" before trusting a fix would otherwise reject the spoofed location.

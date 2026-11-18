@@ -41,15 +41,21 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Ensure required SDK platforms
+      - name: Accept licenses and install SDK packages
+        # 不用 android-actions/setup-android：它自带的 license 步骤在较新 SDK 仓库上
+        # 会报 "Failed to find package 'tools'"。Runner 镜像已预装 Android SDK，直接用。
         run: |
-          # 项目 targetSdk/buildTools 较新，优先用稳定渠道，失败再退回预览渠道
-          sdkmanager --install "platforms;android-37" "build-tools;37.0.0" >/dev/null 2>&1 \
-            || sdkmanager --channel=3 --install "platforms;android-37" "build-tools;37.0.0"
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          SDK="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
+          SDKM="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          echo "SDK root: $SDK"
+          ls "$SDK/cmdline-tools" || true
+          yes | "$SDKM" --licenses >/dev/null 2>&1 || true
+          # 先稳定渠道；android-37 若只在预览渠道，再退回 --channel=3
+          "$SDKM" --install "platform-tools" "platforms;android-37" "build-tools;37.0.0" \
+            || "$SDKM" --channel=3 --install "platforms;android-37" "build-tools;37.0.0"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK"     >> "$GITHUB_ENV"
+          echo "sdk.dir=$SDK"          > local.properties
 
       - name: Git identity
         run: |

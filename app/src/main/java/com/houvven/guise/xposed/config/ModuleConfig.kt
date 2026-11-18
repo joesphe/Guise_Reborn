@@ -4,6 +4,7 @@ import com.houvven.guise.xposed.PackageConfig
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 
 @Serializable
 data class ModuleConfig(
@@ -76,6 +77,40 @@ data class ModuleConfig(
 
     fun parameterSignature(): String =
         json.encodeToString(serializer(), copy(packageName = "", enabled = false))
+
+    /**
+     * 以本配置（模板）为准，保留 [existing] 中**本配置未显式指定**的字段。
+     *
+     * 序列化时 `encodeDefaults = false`，所以「本配置的 JSON 里没有某个 key」
+     * 就等价于「模板没有对该字段表态」。应用模板时若整体覆盖，
+     * 用户在应用配置里额外设置、模板又没写的字段（例如为了测试一致性
+     * 而设的 `networkType`）会被冲成默认值。这里把这些字段沿用过来。
+     *
+     * 注意：模板显式写了某字段时仍以模板为准，因此模板依然能正常改写/重置
+     * 它自己声明过的参数。
+     */
+    fun mergedOnto(existing: ModuleConfig): ModuleConfig {
+        val out = copy()
+        val explicitKeys = runCatching {
+            json.parseToJsonElement(toJson()).jsonObject.keys
+        }.getOrNull() ?: return out
+        val existingObj = runCatching {
+            json.parseToJsonElement(existing.toJson()).jsonObject
+        }.getOrNull() ?: return out
+
+        for (key in existingObj.keys) {
+            if (key in explicitKeys) continue
+            if (key == "enabled") continue
+            val field = runCatching { ModuleConfig::class.java.getDeclaredField(key) }
+                .getOrNull() ?: continue
+            if (java.lang.reflect.Modifier.isStatic(field.modifiers)) continue
+            runCatching {
+                field.isAccessible = true
+                field.set(out, field.get(existing))
+            }
+        }
+        return out
+    }
 
     fun toModuleConfigState() = ModuleConfigState.of(this)
 

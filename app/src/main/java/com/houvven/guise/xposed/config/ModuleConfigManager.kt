@@ -304,6 +304,7 @@ private constructor(
 
         fun applyTemplateSelection(
             templateConfig: ModuleConfig,
+            templateId: String,
             initiallySelected: Set<String>,
             selectedNow: Set<String>,
             notifyOnScopeError: Boolean = false,
@@ -326,13 +327,19 @@ private constructor(
                 val config = getSavedConfig(packageName)
                 config.enabled = false
                 editor.putString(packageName, config.toJson())
+                TemplateApplication.clear(packageName)
             }
             val scopeEnablePackages = enabledPackages.filterTo(mutableSetOf()) { packageName ->
                 !getSavedConfig(packageName).enabled
             }
+            val appliedSignature = templateConfig.parameterSignature()
             enabledPackages.forEach { packageName ->
-                val config = templateConfig.copy(packageName = packageName, enabled = true)
+                // 模板没显式声明的字段沿用该应用原有配置，避免冲掉本地额外设置（如 networkType）
+                val config = templateConfig
+                    .mergedOnto(getSavedConfig(packageName))
+                    .copy(packageName = packageName, enabled = true)
                 editor.putString(packageName, config.toJson())
+                TemplateApplication.record(packageName, templateId, appliedSignature)
             }
             if (!editor.commit()) {
                 if (notifyOnScopeError) {

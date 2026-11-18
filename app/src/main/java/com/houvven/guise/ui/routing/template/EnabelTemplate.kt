@@ -64,6 +64,7 @@ import com.houvven.guise.ui.components.simplify.SimplifyIcon
 import com.houvven.guise.ui.routing.LauncherState
 import com.houvven.guise.ui.routing.LocalNavController
 import com.houvven.guise.xposed.config.ModuleConfig
+import com.houvven.guise.xposed.config.TemplateApplication
 import com.houvven.guise.xposed.config.ModuleConfigManager
 import java.text.Collator
 import java.util.Locale
@@ -144,7 +145,16 @@ fun EnableTemplateScreen(template: Template) {
             val configs = ModuleConfig.getAllSaved()
             val configuredPackages = configs
                 .asSequence()
-                .filter { it.enabled && it.parameterSignature() == templateSignature }
+                .filter { config ->
+                    // 优先按「模板ID + 应用时签名快照」判定：应用配置里多出的字段
+                    //（如特意设置的 networkType）不再影响判定结果。
+                    // 回退到上游原始的签名比对，兼容本次改动之前已应用的配置。
+                    config.enabled && (
+                        TemplateApplication.isApplied(
+                            config.packageName, template.id, templateSignature
+                        ) || config.parameterSignature() == templateSignature
+                    )
+                }
                 .mapTo(mutableSetOf()) { it.packageName }
             val selectedPackages = sortedApps
                 .asSequence()
@@ -177,6 +187,7 @@ fun EnableTemplateScreen(template: Template) {
 
         ModuleConfigManager.applyTemplateSelection(
             templateConfig = templateConfig,
+            templateId = template.id,
             initiallySelected = initiallySelected,
             selectedNow = selects.keys.toSet(),
             notifyOnScopeError = false,
